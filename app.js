@@ -1,11 +1,13 @@
 import client from "./src/controllers/controller.js";
 import { ObjectId } from "mongodb";
-import express, { response } from "express";
+import express from "express";
+import cors from "cors";
 
 const app = express();
-const port = 4002;
+const port = 4000;
 
 app.use(express.json());
+app.use(cors());
 // SALA
 app.post("/newRoom", async (req, res) => {
   try {
@@ -14,7 +16,6 @@ app.post("/newRoom", async (req, res) => {
 
     const room = req.body;
 
-    //Crear
     const result = await collection.insertOne(room);
 
     res.status(201).send({ insertedId: result.insertedId });
@@ -33,7 +34,7 @@ app.get("/getRooms", async (req, res) => {
     //Obtener
     const rooms = await collection.find().toArray();
 
-    res.json(rooms);
+    res.status(200).send(JSON.stringify(rooms));
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -145,16 +146,12 @@ app.get("/room/:id/getBooking", async (req, res) => {
 app.get("/room/getBooking/:user_id", async (req, res) => {
   try {
     await client.connect();
-
     const database = client.db("MEETING_ROOMS");
-    const collectionRooms = database.collection("ROOMS");
     const collectionBooking = database.collection("BOOKING");
 
     const user_id = req.params.user_id;
 
-    const booking = await collectionBooking
-      .find({ usuario: user_id })
-      .toArray();
+    const booking = await collectionBooking.find({ _id: user_id }).toArray();
 
     if (booking.length > 0) {
       res.status(200).json(booking);
@@ -166,6 +163,121 @@ app.get("/room/getBooking/:user_id", async (req, res) => {
     // res.status(201).send(booking);
   } catch (error) {
     res.status(500).send(error.message);
+  }
+});
+
+app.get("/room/:id_room/getBooking", async (req, res) => {
+  try {
+    await client.connect();
+    const database = client.db("MEETING_ROOMS");
+    const collectionRooms = database.collection("ROOMS");
+
+    const id_room = req.params.id_room;
+
+    const room = await collectionRooms.findOne({ _id: id_room }).toArray();
+
+    if (!room) {
+      res.status(404).send({ message: "Sala no encontrada" });
+      return;
+    }
+
+    const collectionBooking = database.collection("BOOKING");
+
+    const booking = await collectionBooking.find({ id_sala: id_room });
+
+    if (booking.length > 0) {
+      res.status(200).json(booking);
+    } else {
+      res
+        .status(404)
+        .json({ message: "No se encontraron reservas para el usuaio" });
+    }
+    // res.status(201).send(booking);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.put("/room/:idroom/updateBooking/:idbooking", async (req, res) => {
+  try {
+    await client.connect();
+    const database = client.db("MEETING_ROOMS");
+    const collectionRooms = database.collection("ROOMS");
+
+    const id_room = req.params.idroom;
+    const id_booking = req.params.idbooking;
+
+    const room = await collectionRooms.findOne({ _id: new ObjectId(id_room) });
+
+    if (!room) {
+      res.status(404).send({ message: "Sala no encontrada" });
+      return;
+    }
+
+    const bookingUpdated = req.body;
+
+    const collectionBooking = database.collection("BOOKING");
+
+    const booking = await collectionBooking.findOne({
+      _id: new ObjectId(id_booking),
+    });
+
+    if (!booking) {
+      res.status(404).send({ message: "Reserva no encontrada" });
+      return;
+    }
+
+    console.log(bookingUpdated.fecha);
+    console.log(bookingUpdated.hora);
+
+    const result = await collectionBooking.updateOne(
+      { _id: new ObjectId(id_booking) },
+      { $set: { fecha: bookingUpdated.fecha, hora: bookingUpdated.hora } }
+    );
+
+    if (result.modifiedCount === 0) {
+      res
+        .status(400)
+        .send({ message: "No se realizaron cambios en la reserva" });
+    } else {
+      res.status(200).send({ response: result });
+    }
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+});
+
+app.delete("/room/:id_room/deleteBooking/:id_booking", async (req, res) => {
+  try {
+    await client.connect();
+    const database = client.db("MEETING_ROOMS");
+    const collectionRooms = database.collection("ROOM");
+    const collectionBooking = database.collection("BOOKING");
+
+    const id_room = req.params.id_room;
+    const id_booking = req.params.id_booking;
+
+    const room = await collectionRooms.deleteOne({
+      _id: new ObjectId(id_room),
+    });
+
+    if (!room) {
+      res.status(404).send({ message: "Sala no encontrada" });
+      return;
+    }
+
+    const booking = await collectionBooking.deleteOne({
+      _id: new ObjectId(id_booking),
+    });
+
+    if (booking.deletedCount === 0) {
+      res.status(404).send({ message: "Reserva no encontrada" });
+      return;
+    }
+
+    res.status(200).send({ message: "Reserva eliminada " });
+  } catch (error) {
+    res.status(500).send({ message: error.message });
   }
 });
 
